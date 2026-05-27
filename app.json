@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Pixy",
+    "slug": "pixy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "pixy",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0F0F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.pixy.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Pixy needs your location to show nearby photographers.",
+        "NSCameraUsageDescription": "Photographers use the camera to capture and deliver photos.",
+        "NSPhotoLibraryUsageDescription": "Pixy uploads portfolio and delivered photos.",
+        "NSPhotoLibraryAddUsageDescription": "Pixy saves delivered photos to your library."
+      }
+    },
+    "android": {
+      "package": "com.pixy.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F0F0F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Pixy needs your location to show nearby photographers."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pixy accesses your photos to upload portfolio images."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
