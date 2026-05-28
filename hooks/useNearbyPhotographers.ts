@@ -4,7 +4,12 @@ import { supabase } from '@/lib/supabase';
 import { useMapStore } from '@/store/mapStore';
 import type { PhotographerProfile } from '@/types';
 
-export function useNearbyPhotographers(radiusKm = 10) {
+// Walking pace ~5 km/h → 1 km ≈ 12 min. We show only photographers who can arrive within 10 min.
+export function etaMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round(distanceKm * 12));
+}
+
+export function useNearbyPhotographers(radiusKm = 1.5) {
   const { userLocation, setUserLocation, setPhotographers, setRegion, setLoading } = useMapStore();
 
   useEffect(() => {

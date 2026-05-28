@@ -28,6 +28,7 @@ export interface PhotographerProfile {
   total_reviews: number;
   total_orders: number;
   response_time_min: number;    // avg minutes to accept a booking
+  distance_km?: number;         // populated by nearby_photographers RPC
   user?: User;
   services?: Service[];
 }

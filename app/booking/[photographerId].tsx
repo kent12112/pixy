@@ -51,14 +51,14 @@ export default function BookingScreen() {
     try {
       const [result] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
       if (result) {
-        setMeetAddress([result.name, result.city, result.region].filter(Boolean).join(', '));
+        setMeetAddress([result.name, result.city].filter(Boolean).join(', '));
       }
     } catch {}
   }
 
-  async function handleBook() {
-    if (!selectedService) { Alert.alert('Select a service first'); return; }
-    if (!meetLocation) { Alert.alert('Set a meeting location'); return; }
+  async function handleRequest() {
+    if (!selectedService) { Alert.alert('Select a package first'); return; }
+    if (!meetLocation) { Alert.alert('Could not get your location'); return; }
     if (!user) return;
 
     setSubmitting(true);
@@ -74,13 +74,13 @@ export default function BookingScreen() {
           meet_address: meetAddress || `${meetLocation.latitude.toFixed(4)}, ${meetLocation.longitude.toFixed(4)}`,
           notes: notes || null,
           total_price: selectedService.price,
+          scheduled_at: null, // instant / on-demand
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Create conversation thread
       await supabase.from('conversations').insert({
         order_id: order.id,
         client_id: user.id,
@@ -89,7 +89,7 @@ export default function BookingScreen() {
 
       router.replace(`/order/${order.id}`);
     } catch (err: any) {
-      Alert.alert('Booking failed', err.message);
+      Alert.alert('Request failed', err.message);
     } finally {
       setSubmitting(false);
     }
@@ -99,30 +99,68 @@ export default function BookingScreen() {
     return <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>;
   }
 
+  if (!profile) return null;
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Header */}
-        <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.closeBtn}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>Book Session</Text>
-          <View style={{ width: 32 }} />
-        </View>
+      {/* Close */}
+      <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+        <Text style={styles.closeBtnText}>✕</Text>
+      </TouchableOpacity>
 
-        {/* Photographer summary */}
-        <View style={styles.photographerRow}>
-          <Avatar uri={profile?.user?.avatar_url} name={profile?.user?.full_name} size={48} />
-          <View>
-            <Text style={styles.photographerName}>{profile?.user?.full_name}</Text>
-            <Text style={styles.photographerLocation}>📍 {profile?.location_name}</Text>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+
+        {/* Photographer hero */}
+        <View style={styles.hero}>
+          <Avatar uri={profile.user?.avatar_url} name={profile.user?.full_name} size={64} />
+          <View style={styles.heroText}>
+            <Text style={styles.heroName}>{profile.user?.full_name}</Text>
+            <Text style={styles.heroLocation}>📍 {profile.location_name}</Text>
+            <View style={styles.heroMeta}>
+              <Text style={styles.metaItem}>⭐ {profile.rating}</Text>
+              <Text style={styles.metaDot}>·</Text>
+              <Text style={styles.metaItem}>⚡ ~{profile.response_time_min} min response</Text>
+            </View>
           </View>
         </View>
 
-        {/* Service selector */}
+        {/* Live availability banner */}
+        <View style={styles.availBanner}>
+          <View style={styles.availDot} />
+          <Text style={styles.availText}>
+            Available right now · usually responds in {profile.response_time_min} min
+          </Text>
+        </View>
+
+        {/* Your current location */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Select Service</Text>
+          <Text style={styles.sectionLabel}>📍 Your location</Text>
+          {meetLocation ? (
+            <>
+              <MapView
+                style={styles.miniMap}
+                provider={PROVIDER_DEFAULT}
+                initialRegion={{ ...meetLocation, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
+                onPress={(e) => {
+                  const coord = e.nativeEvent.coordinate;
+                  setMeetLocation(coord);
+                  reverseGeocode(coord.latitude, coord.longitude);
+                }}
+              >
+                <Marker coordinate={meetLocation} />
+              </MapView>
+              {meetAddress ? (
+                <Text style={styles.addressText}>{meetAddress} · <Text style={styles.addressHint}>tap map to adjust</Text></Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={styles.noLocationText}>Getting your location…</Text>
+          )}
+        </View>
+
+        {/* Package selector */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>📦 Choose a package</Text>
           {services.map((s) => (
             <TouchableOpacity
               key={s.id}
@@ -134,69 +172,50 @@ export default function BookingScreen() {
                 <Text style={[styles.serviceOptName, selectedService?.id === s.id && { color: COLORS.primary }]}>
                   {s.name}
                 </Text>
-                <Text style={styles.serviceOptMeta}>⏱ {s.duration_min} min · 📦 {s.deliverables}</Text>
+                <Text style={styles.serviceOptMeta}>⏱ {s.duration_min} min · {s.deliverables}</Text>
               </View>
-              <Text style={styles.serviceOptPrice}>${s.price}</Text>
+              <Text style={[styles.serviceOptPrice, selectedService?.id === s.id && { color: COLORS.primary }]}>
+                ${s.price}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Meeting point map */}
+        {/* Optional note */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Meeting Point</Text>
-          <Text style={styles.sectionHint}>Tap the map to set your exact location</Text>
-          {meetLocation && (
-            <MapView
-              style={styles.miniMap}
-              provider={PROVIDER_DEFAULT}
-              initialRegion={{ ...meetLocation, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-              onPress={(e) => {
-                const coord = e.nativeEvent.coordinate;
-                setMeetLocation(coord);
-                reverseGeocode(coord.latitude, coord.longitude);
-              }}
-            >
-              <Marker coordinate={meetLocation} />
-            </MapView>
-          )}
-          {meetAddress ? (
-            <Text style={styles.addressText}>📍 {meetAddress}</Text>
-          ) : null}
-        </View>
-
-        {/* Notes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Notes (optional)</Text>
+          <Text style={styles.sectionLabel}>💬 Message (optional)</Text>
           <TextInput
             style={styles.notesInput}
             value={notes}
             onChangeText={setNotes}
-            placeholder="E.g. Meet me at the fountain entrance. Looking for fun, candid shots."
+            placeholder="E.g. Meet me at the main entrance. Looking for candid, fun shots!"
             placeholderTextColor={COLORS.muted}
             multiline
-            numberOfLines={3}
+            numberOfLines={2}
           />
         </View>
 
-        {/* Price summary */}
-        {selectedService && (
-          <View style={styles.priceSummary}>
-            <Text style={styles.priceSummaryLabel}>Total</Text>
-            <Text style={styles.priceSummaryValue}>${selectedService.price}</Text>
-          </View>
-        )}
+        <View style={{ height: 120 }} />
       </ScrollView>
 
+      {/* Request footer */}
       <View style={styles.footer}>
+        <View style={styles.footerTop}>
+          <Text style={styles.footerLabel}>Total</Text>
+          <Text style={styles.footerPrice}>${selectedService?.price ?? 0}</Text>
+        </View>
         <Button
-          label={submitting ? 'Booking...' : `Book Now — $${selectedService?.price ?? 0}`}
+          label={submitting ? 'Sending request…' : '📸  Request Now'}
           variant="primary"
           size="lg"
-          onPress={handleBook}
+          onPress={handleRequest}
           loading={submitting}
           disabled={!selectedService || !meetLocation}
-          style={{ flex: 1 }}
+          style={styles.requestBtn}
         />
+        <Text style={styles.footerDisclaimer}>
+          The photographer will confirm within {profile.response_time_min} min. No charge until they accept.
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -205,26 +224,64 @@ export default function BookingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.white },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.base, gap: SPACING.lg, paddingBottom: 120 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  closeBtn: { fontSize: 18, color: COLORS.muted, padding: SPACING.sm },
-  modalTitle: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.dark },
-  photographerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, backgroundColor: `${COLORS.primary}08`, borderRadius: BORDER_RADIUS.lg },
-  photographerName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.dark },
-  photographerLocation: { fontSize: FONTS.sizes.sm, color: COLORS.muted },
+  closeBtn: {
+    position: 'absolute', top: 52, right: SPACING.base,
+    zIndex: 10, width: 32, height: 32, borderRadius: 16,
+    backgroundColor: COLORS.light, alignItems: 'center', justifyContent: 'center',
+  },
+  closeBtnText: { fontSize: 14, color: COLORS.muted },
+  container: { padding: SPACING.base, gap: SPACING.xl, paddingTop: SPACING['2xl'] },
+  // Hero
+  hero: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  heroText: { flex: 1 },
+  heroName: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.dark },
+  heroLocation: { fontSize: FONTS.sizes.sm, color: COLORS.muted, marginTop: 2 },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+  metaItem: { fontSize: FONTS.sizes.sm, color: COLORS.dark, fontWeight: '500' },
+  metaDot: { color: COLORS.muted },
+  // Availability
+  availBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: `${COLORS.success}15`,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  availDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
+  availText: { fontSize: FONTS.sizes.sm, color: COLORS.success, fontWeight: '600', flex: 1 },
+  // Section
   section: { gap: SPACING.sm },
-  sectionLabel: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  sectionHint: { fontSize: FONTS.sizes.xs, color: COLORS.muted },
-  serviceOption: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.light, borderRadius: BORDER_RADIUS.lg, padding: SPACING.md },
+  sectionLabel: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.dark },
+  miniMap: { height: 160, borderRadius: BORDER_RADIUS.lg, overflow: 'hidden' },
+  addressText: { fontSize: FONTS.sizes.sm, color: COLORS.muted },
+  addressHint: { color: COLORS.primary },
+  noLocationText: { fontSize: FONTS.sizes.sm, color: COLORS.muted },
+  // Services
+  serviceOption: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.light,
+    borderRadius: BORDER_RADIUS.lg, padding: SPACING.md,
+  },
   serviceSelected: { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}06` },
   serviceOptName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.dark },
   serviceOptMeta: { fontSize: FONTS.sizes.xs, color: COLORS.muted, marginTop: 2 },
-  serviceOptPrice: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.primary, marginLeft: SPACING.sm },
-  miniMap: { height: 180, borderRadius: BORDER_RADIUS.lg, overflow: 'hidden' },
-  addressText: { fontSize: FONTS.sizes.sm, color: COLORS.muted },
-  notesInput: { borderWidth: 1.5, borderColor: COLORS.light, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, fontSize: FONTS.sizes.base, color: COLORS.dark, textAlignVertical: 'top', minHeight: 80 },
-  priceSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, backgroundColor: `${COLORS.primary}08`, borderRadius: BORDER_RADIUS.lg },
-  priceSummaryLabel: { fontSize: FONTS.sizes.base, fontWeight: '600', color: COLORS.dark },
-  priceSummaryValue: { fontSize: FONTS.sizes.xl, fontWeight: '900', color: COLORS.primary },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: SPACING.base, paddingBottom: SPACING['2xl'], backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.light },
+  serviceOptPrice: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.muted, marginLeft: SPACING.sm },
+  // Notes
+  notesInput: {
+    borderWidth: 1.5, borderColor: COLORS.light, borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md, fontSize: FONTS.sizes.base, color: COLORS.dark,
+    textAlignVertical: 'top', minHeight: 72,
+  },
+  // Footer
+  footer: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    padding: SPACING.base, paddingBottom: SPACING['2xl'],
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1, borderTopColor: COLORS.light,
+    gap: SPACING.sm,
+  },
+  footerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  footerLabel: { fontSize: FONTS.sizes.sm, color: COLORS.muted, fontWeight: '600' },
+  footerPrice: { fontSize: FONTS.sizes['2xl'], fontWeight: '900', color: COLORS.dark },
+  requestBtn: { borderRadius: BORDER_RADIUS.full },
+  footerDisclaimer: { fontSize: FONTS.sizes.xs, color: COLORS.muted, textAlign: 'center' },
 });

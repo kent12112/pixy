@@ -89,7 +89,7 @@ export default function PhotographerDashboard() {
           <View style={styles.availCard}>
             <View>
               <Text style={styles.availTitle}>
-                {profile?.is_available ? '🟢 You're available' : '🔴 You're offline'}
+                {profile?.is_available ? "🟢 You're available" : "🔴 You're offline"}
               </Text>
               <Text style={styles.availDesc}>
                 {profile?.is_available
@@ -149,7 +149,7 @@ export default function PhotographerDashboard() {
             <Text style={styles.emptyTitle}>No active orders</Text>
             <Text style={styles.emptyDesc}>
               {profile?.is_available
-                ? 'You're visible to clients. Bookings will appear here.'
+                ? "You're visible to clients. Bookings will appear here."
                 : 'Toggle availability to start getting bookings.'}
             </Text>
           </View>

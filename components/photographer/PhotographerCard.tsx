@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { etaMinutes } from '@/hooks/useNearbyPhotographers';
 import { Avatar } from '@/components/ui/Avatar';
 import { StarRating } from '@/components/ui/StarRating';
 import { Badge } from '@/components/ui/Badge';
@@ -21,16 +22,13 @@ export function PhotographerCard({ photographer, variant = 'card' }: Props) {
     router.push(`/photographer/${photographer.id}`);
   }
 
+  const eta = photographer.distance_km != null ? etaMinutes(photographer.distance_km) : null;
+
   if (variant === 'card') {
     return (
       <TouchableOpacity style={styles.card} onPress={goToProfile} activeOpacity={0.9}>
-        {/* Portfolio preview strip */}
         {photographer.portfolio_urls.length > 0 && (
-          <Image
-            source={{ uri: photographer.portfolio_urls[0] }}
-            style={styles.cardImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: photographer.portfolio_urls[0] }} style={styles.cardImage} resizeMode="cover" />
         )}
         <View style={styles.cardBody}>
           <View style={styles.row}>
@@ -39,7 +37,11 @@ export function PhotographerCard({ photographer, variant = 'card' }: Props) {
               <Text style={styles.name} numberOfLines={1}>{user?.full_name ?? 'Photographer'}</Text>
               <Text style={styles.location} numberOfLines={1}>{photographer.location_name}</Text>
             </View>
-            <View style={styles.onlineDot(photographer.is_available)} />
+            {eta != null && (
+              <View style={styles.etaBadge}>
+                <Text style={styles.etaText}>~{eta} min</Text>
+              </View>
+            )}
           </View>
           <View style={styles.row}>
             <StarRating value={photographer.rating} showCount={photographer.total_reviews} />
@@ -53,34 +55,43 @@ export function PhotographerCard({ photographer, variant = 'card' }: Props) {
   // Sheet variant — shown in bottom sheet when pin is tapped
   return (
     <View style={styles.sheet}>
-      <View style={styles.row}>
-        <Avatar uri={user?.avatar_url} name={user?.full_name} size={56} />
-        <View style={{ flex: 1, marginLeft: SPACING.md }}>
-          <Text style={styles.sheetName}>{user?.full_name ?? 'Photographer'}</Text>
-          <Text style={styles.location}>{photographer.location_name}</Text>
-          <StarRating value={photographer.rating} showCount={photographer.total_reviews} size={13} />
+      {/* Tapping the card body navigates to full profile */}
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.85}>
+        <View style={styles.row}>
+          <Avatar uri={user?.avatar_url} name={user?.full_name} size={56} />
+          <View style={{ flex: 1, marginLeft: SPACING.md }}>
+            <Text style={styles.sheetName}>{user?.full_name ?? 'Photographer'}</Text>
+            <Text style={styles.location}>{photographer.location_name}</Text>
+            <StarRating value={photographer.rating} showCount={photographer.total_reviews} size={13} />
+            {eta != null && (
+              <View style={styles.sheetEtaRow}>
+                <View style={styles.sheetEtaDot} />
+                <Text style={styles.sheetEtaText}>arrives in ~{eta} min</Text>
+              </View>
+            )}
+          </View>
+          <View>
+            <Text style={styles.sheetPrice}>${photographer.base_price}</Text>
+            <Text style={styles.perHr}>/hr</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.sheetPrice}>${photographer.base_price}</Text>
-          <Text style={styles.perHr}>/hr</Text>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.portfolioRow}>
+          {photographer.portfolio_urls.map((url, i) => (
+            <Image key={i} source={{ uri: url }} style={styles.portfolioThumb} />
+          ))}
+        </ScrollView>
+
+        <View style={styles.tagRow}>
+          {photographer.specialties.slice(0, 4).map((s) => (
+            <Badge key={s} label={s} color="primary" />
+          ))}
+          {photographer.is_available && <Badge label="Available now" color="success" />}
         </View>
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.portfolioRow}>
-        {photographer.portfolio_urls.map((url, i) => (
-          <Image key={i} source={{ uri: url }} style={styles.portfolioThumb} />
-        ))}
-      </ScrollView>
-
-      <View style={styles.tagRow}>
-        {photographer.specialties.slice(0, 4).map((s) => (
-          <Badge key={s} label={s} color="primary" />
-        ))}
-        {photographer.is_available && <Badge label="Available now" color="success" />}
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.sheetActions}>
-        <Button label="View Profile" variant="outline" size="md" onPress={goToProfile} style={{ flex: 1 }} />
+        <Button label="View Profile →" variant="outline" size="md" onPress={goToProfile} style={{ flex: 1 }} />
         <Button
           label="Book Now"
           variant="primary"
@@ -109,6 +120,11 @@ const styles = StyleSheet.create({
   cardBody: { padding: SPACING.md, gap: SPACING.sm },
   // Sheet
   sheet: { padding: SPACING.base, gap: SPACING.md },
+  etaBadge: { backgroundColor: `${COLORS.success}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: BORDER_RADIUS.full },
+  etaText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.success },
+  sheetEtaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  sheetEtaDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.success },
+  sheetEtaText: { fontSize: FONTS.sizes.xs, fontWeight: '600', color: COLORS.success },
   sheetName: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.dark },
   sheetPrice: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.primary, textAlign: 'right' },
   perHr: { fontSize: FONTS.sizes.xs, color: COLORS.muted, textAlign: 'right' },

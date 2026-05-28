@@ -1,5 +1,5 @@
 import '../global.css';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -15,22 +15,30 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
+  const [navReady, setNavReady] = useState(false);
   useAuth(); // bootstraps session listener
 
+  // Wait one tick for the navigator to mount before attempting redirects
   useEffect(() => {
-    if (isLoading) return;
+    const t = setTimeout(() => setNavReady(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    console.log('[AuthGate]', { navReady, isLoading, user: user?.id, segments });
+    if (!navReady || isLoading) return;
     const inAuth = segments[0] === '(auth)';
+    console.log('[AuthGate] navigating', { inAuth, hasUser: !!user });
     if (!user && !inAuth) {
       router.replace('/(auth)/welcome');
-    } else if (user && inAuth) {
-      // Route by role
+    } else if (user && (inAuth || segments.length === 0)) {
       if (user.role === 'photographer') {
         router.replace('/(photographer)/dashboard');
       } else {
         router.replace('/(client)/map');
       }
     }
-  }, [user, isLoading, segments]);
+  }, [user, isLoading, segments, navReady]);
 
   return <>{children}</>;
 }
@@ -41,6 +49,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthGate>
           <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(client)" />
             <Stack.Screen name="(photographer)" />

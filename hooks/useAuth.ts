@@ -6,15 +6,22 @@ export function useAuth() {
   const { session, user, isLoading, setSession, setUser, setLoading, signOut } = useAuthStore();
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) fetchUser(session.user.id);
-      else setLoading(false);
-    });
+    // Safety net — unblock navigation if Supabase never responds
+    const timeout = setTimeout(() => setLoading(false), 5000);
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.getSession()
+      .then(({ data: { session } }: { data: { session: any } }) => {
+        clearTimeout(timeout);
+        setSession(session);
+        if (session?.user) fetchUser(session.user.id);
+        else setLoading(false);
+      })
+      .catch(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setSession(session);
       if (session?.user) fetchUser(session.user.id);
       else {
@@ -23,18 +30,23 @@ export function useAuth() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchUser(id: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (data) setUser(data as any);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (data) setUser(data as any);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function login(email: string, password: string) {

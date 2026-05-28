@@ -27,7 +27,7 @@ export function useRealtimeOrder(orderId: string | null) {
           table: 'orders',
           filter: `id=eq.${orderId}`,
         },
-        (payload) => {
+        (payload: any) => {
           if (payload.new) {
             upsertOrder(payload.new as Order);
             setCurrentOrder(payload.new as Order);

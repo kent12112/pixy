@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
 import type { PhotographerProfile } from '@/types';
+import { etaMinutes } from '@/hooks/useNearbyPhotographers';
 import { COLORS, BORDER_RADIUS, FONTS } from '@/constants';
 
 interface Props {
@@ -30,7 +31,14 @@ export function PhotographerPin({ photographer, selected = false, onPress }: Pro
             </Text>
           </View>
         )}
-        <Text style={styles.price}>${photographer.base_price}</Text>
+        <View>
+          <Text style={[styles.eta, selected && styles.etaSelected]}>
+            ~{photographer.distance_km != null ? etaMinutes(photographer.distance_km) : '?'} min
+          </Text>
+          <Text style={[styles.price, selected && styles.priceSelected]}>
+            ${photographer.base_price}
+          </Text>
+        </View>
         {photographer.is_available && <View style={styles.dot} />}
       </View>
       <View style={[styles.tail, selected && styles.tailSelected]} />
@@ -69,7 +77,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   initials: { fontSize: 11, fontWeight: '700', color: COLORS.white },
-  price: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.dark },
+  eta: { fontSize: 10, fontWeight: '800', color: COLORS.success },
+  etaSelected: { color: COLORS.white },
+  price: { fontSize: 10, color: COLORS.muted },
+  priceSelected: { color: `${COLORS.white}cc` },
   dot: {
     width: 8,
     height: 8,

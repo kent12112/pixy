@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import type { Database } from '@/types/database';
+import { mockSupabase } from './supabase.mock';
 
 // ─── Supabase Secure Storage (uses Expo SecureStore) ──────────────────────────
 
@@ -16,18 +17,25 @@ const ExpoSecureStoreAdapter = {
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
+const isMockMode =
+  !supabaseUrl ||
+  !supabaseAnonKey ||
+  supabaseUrl === 'https://your-project.supabase.co';
+
+if (isMockMode) {
   console.warn(
-    '[Pixy] EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are not set.\n' +
-    'Copy .env.example to .env and fill in your Supabase project credentials.'
+    '[Pixy] Running in MOCK mode — Supabase credentials not configured.\n' +
+    'Copy .env.example to .env and fill in your Supabase project credentials to connect a real backend.'
   );
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+export const supabase = isMockMode
+  ? mockSupabase
+  : createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: ExpoSecureStoreAdapter,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });

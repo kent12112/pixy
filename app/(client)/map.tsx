@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View, StyleSheet, Text, SafeAreaView, TouchableOpacity,
   ActivityIndicator, FlatList, Dimensions,
 } from 'react-native';
 import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
+import { useRouter } from 'expo-router';
 import { PhotographerPin } from '@/components/map/PhotographerPin';
 import { PhotographerCard } from '@/components/photographer/PhotographerCard';
 import { useMapStore } from '@/store/mapStore';
@@ -15,17 +16,18 @@ const { height } = Dimensions.get('window');
 
 export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
-  const { region, photographers, selectedPhotographer, isLoading, selectPhotographer } = useMapStore();
+  const router = useRouter();
+  const { region, photographers, isLoading } = useMapStore();
   const { refetch } = useNearbyPhotographers();
   const [showList, setShowList] = useState(false);
 
+  // Animate map to user's location once it's resolved
+  useEffect(() => {
+    mapRef.current?.animateToRegion(region, 800);
+  }, [region.latitude, region.longitude]);
+
   function handlePinPress(p: PhotographerProfile) {
-    selectPhotographer(p);
-    setShowList(false);
-    mapRef.current?.animateToRegion(
-      { latitude: p.latitude, longitude: p.longitude, latitudeDelta: 0.015, longitudeDelta: 0.015 },
-      400
-    );
+    router.push(`/photographer/${p.id}`);
   }
 
   return (
@@ -37,13 +39,12 @@ export default function MapScreen() {
         initialRegion={region}
         showsUserLocation
         showsMyLocationButton={false}
-        onPress={() => selectPhotographer(null)}
       >
         {photographers.map((p) => (
           <PhotographerPin
             key={p.id}
             photographer={p}
-            selected={selectedPhotographer?.id === p.id}
+            selected={false}
             onPress={() => handlePinPress(p)}
           />
         ))}
@@ -66,17 +67,9 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Bottom sheet — selected photographer */}
-      {selectedPhotographer && !showList && (
-        <View style={styles.bottomSheet}>
-          <View style={styles.sheetHandle} />
-          <PhotographerCard photographer={selectedPhotographer} variant="sheet" />
-        </View>
-      )}
 
       {/* List toggle + refresh */}
-      {!selectedPhotographer && (
-        <View style={styles.bottomFab}>
+      <View style={styles.bottomFab}>
           <TouchableOpacity style={styles.fab} onPress={refetch}>
             <Text style={styles.fabIcon}>🔄</Text>
           </TouchableOpacity>
@@ -84,7 +77,6 @@ export default function MapScreen() {
             <Text style={styles.fabIcon}>{showList ? '🗺️' : '☰'}</Text>
           </TouchableOpacity>
         </View>
-      )}
 
       {/* List view overlay */}
       {showList && (
@@ -112,7 +104,7 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
-  map: { ...StyleSheet.absoluteFillObject },
+  map: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   topBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
@@ -143,7 +135,7 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.primary },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.5)',
@@ -169,6 +161,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.light,
     marginTop: SPACING.sm,
     marginBottom: SPACING.xs,
+  },
+  sheetTapHint: {
+    textAlign: 'center',
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.primary,
+    fontWeight: '600',
+    paddingBottom: SPACING.sm,
   },
   bottomFab: {
     position: 'absolute',
