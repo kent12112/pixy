@@ -9,7 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { StarRating } from '@/components/ui/StarRating';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import type { PhotographerProfile, Review, Service } from '@/types';
+import type { PhotographerProfile, Service } from '@/types';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '@/constants';
 
 const { width } = Dimensions.get('window');
@@ -19,7 +19,6 @@ export default function PhotographerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [profile, setProfile] = useState<PhotographerProfile | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,21 +26,12 @@ export default function PhotographerProfileScreen() {
   }, [id]);
 
   async function load(photographerId: string) {
-    const [{ data: p }, { data: r }] = await Promise.all([
-      supabase
-        .from('photographer_profiles')
-        .select('*, user:users(*), services(*)')
-        .eq('id', photographerId)
-        .single(),
-      supabase
-        .from('reviews')
-        .select('*, client:users!reviews_client_id_fkey(*)')
-        .eq('photographer_id', photographerId)
-        .order('created_at', { ascending: false })
-        .limit(20),
-    ]);
+    const { data: p } = await supabase
+      .from('photographer_profiles')
+      .select('*, user:users(*), services(*)')
+      .eq('id', photographerId)
+      .single();
     setProfile(p as any);
-    setReviews((r as any) ?? []);
     setLoading(false);
   }
 
@@ -75,7 +65,9 @@ export default function PhotographerProfileScreen() {
               {profile.is_available && <Badge label="Available" color="success" />}
             </View>
             <Text style={styles.location}>📍 {profile.location_name}</Text>
-            <StarRating value={profile.rating} showCount={profile.total_reviews} />
+            <TouchableOpacity onPress={() => router.push(`/photographer/reviews/${profile.id}` as any)}>
+              <StarRating value={profile.rating} showCount={profile.total_reviews} />
+            </TouchableOpacity>
           </View>
           <View>
             <Text style={styles.bigPrice}>${profile.base_price}</Text>
@@ -147,27 +139,7 @@ export default function PhotographerProfileScreen() {
           </View>
         )}
 
-        {/* Reviews */}
-        {reviews.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
-            {reviews.slice(0, 5).map((r) => (
-              <View key={r.id} style={styles.reviewCard}>
-                <View style={styles.reviewHeader}>
-                  <Avatar uri={(r as any).client?.avatar_url} name={(r as any).client?.full_name} size={32} />
-                  <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-                    <Text style={styles.reviewerName}>{(r as any).client?.full_name}</Text>
-                    <StarRating value={r.rating} size={12} />
-                  </View>
-                  <Text style={styles.reviewDate}>
-                    {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </Text>
-                </View>
-                {r.comment && <Text style={styles.reviewComment}>{r.comment}</Text>}
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Reviews — tap rating to open full reviews page */}
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -216,11 +188,6 @@ const styles = StyleSheet.create({
   serviceDuration: { fontSize: FONTS.sizes.xs, color: COLORS.muted },
   servicePriceCol: { justifyContent: 'center', marginLeft: SPACING.md },
   servicePrice: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.primary },
-  reviewCard: { marginBottom: SPACING.md, gap: SPACING.sm },
-  reviewHeader: { flexDirection: 'row', alignItems: 'center' },
-  reviewerName: { fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.dark },
-  reviewDate: { fontSize: FONTS.sizes.xs, color: COLORS.muted },
-  reviewComment: { fontSize: FONTS.sizes.sm, color: COLORS.dark, lineHeight: 20, paddingLeft: 32 + SPACING.sm },
   bookBar: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,

@@ -53,6 +53,13 @@ export default function PhotographerLayout() {
           tabBarIcon: ({ focused }) => <TabIcon emoji="💰" focused={focused} />,
         }}
       />
+      <Tabs.Screen
+        name="reviews"
+        options={{
+          title: 'Reviews',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="⭐" focused={focused} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -45,6 +45,9 @@ export default function OrderScreen() {
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [secsLeft, setSecsLeft] = useState<number | null>(null);
+
+  const EXPIRY_SECS = 10 * 60;
 
   useRealtimeOrder(id ?? null);
 
@@ -62,6 +65,13 @@ export default function OrderScreen() {
   const isDelivering = order?.status === 'delivering';
   const isCompleted = order?.status === 'completed';
 
+  // Check if client already reviewed this completed order (survives remounts)
+  useEffect(() => {
+    if (!isCompleted || !isClient || !id) return;
+    supabase.from('reviews').select('id').eq('order_id', id).maybeSingle()
+      .then(({ data }) => { if (data) setReviewSubmitted(true); });
+  }, [isCompleted, isClient, id]);
+
   // Pulse animation for pending state
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -75,6 +85,27 @@ export default function OrderScreen() {
     anim.start();
     return () => anim.stop();
   }, [isPending]);
+
+  // Countdown timer — auto-cancel pending orders after 10 minutes
+  useEffect(() => {
+    if (!isPending || !order) return;
+    const expiresAt = new Date(order.created_at).getTime() + EXPIRY_SECS * 1000;
+
+    function tick() {
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      setSecsLeft(remaining);
+      if (remaining === 0) {
+        supabase.from('orders').update({ status: 'cancelled' }).eq('id', id).then(() => {
+          Alert.alert('Request expired', 'The photographer didn\'t respond in time. Your request has been cancelled.');
+          router.back();
+        });
+      }
+    }
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isPending, order?.id]);
 
   async function updateStatus(status: OrderStatus) {
     await supabase.from('orders').update({ status }).eq('id', id);
@@ -258,11 +289,25 @@ export default function OrderScreen() {
               </Animated.View>
               <Text style={styles.pendingTitle}>Finding your photographer…</Text>
               <Text style={styles.pendingSubtitle}>Your request has been sent. Usually confirmed in minutes.</Text>
+              {secsLeft !== null && (
+                <View style={styles.countdown}>
+                  <Text style={[styles.countdownText, secsLeft < 60 && styles.countdownUrgent]}>
+                    Expires in {Math.floor(secsLeft / 60)}:{String(secsLeft % 60).padStart(2, '0')}
+                  </Text>
+                </View>
+              )}
             </View>
           ) : (
             <View style={styles.activeState}>
               <Badge label={ORDER_STATUS_LABEL[order.status] ?? order.status} color={STATUS_COLOR[order.status]} />
               <Text style={styles.activeStatusText}>{ORDER_STATUS_LABEL[order.status]}</Text>
+              {isPending && isPhotographer && secsLeft !== null && (
+                <View style={styles.countdown}>
+                  <Text style={[styles.countdownText, secsLeft < 60 && styles.countdownUrgent]}>
+                    Respond within {Math.floor(secsLeft / 60)}:{String(secsLeft % 60).padStart(2, '0')}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -447,7 +492,10 @@ const styles = StyleSheet.create({
   pendingPulse: { width: 64, height: 64, borderRadius: 32, backgroundColor: `${COLORS.primary}20`, alignItems: 'center', justifyContent: 'center' },
   pendingTitle: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.dark, textAlign: 'center' },
   pendingSubtitle: { fontSize: FONTS.sizes.sm, color: COLORS.muted, textAlign: 'center' },
-  activeState: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.base, backgroundColor: `${COLORS.primary}08` },
+  countdown: { marginTop: SPACING.xs, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, backgroundColor: `${COLORS.warning}18`, borderRadius: BORDER_RADIUS.full },
+  countdownText: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.warning },
+  countdownUrgent: { color: COLORS.error },
+  activeState: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACING.sm, padding: SPACING.base, backgroundColor: `${COLORS.primary}08` },
   activeStatusText: { fontSize: FONTS.sizes.base, fontWeight: '600', color: COLORS.dark },
   section: { padding: SPACING.base, borderBottomWidth: 1, borderBottomColor: COLORS.light, gap: SPACING.sm },
   sectionTitle: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.5 },

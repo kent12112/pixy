@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList,
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/Badge';
 import type { Order, OrderStatus } from '@/types';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, ORDER_STATUS_LABEL } from '@/constants';
+
+const EXPIRY_MS = 10 * 60 * 1000;
 
 const STATUS_BADGE: Record<OrderStatus, 'success' | 'warning' | 'error' | 'primary' | 'muted'> = {
   pending: 'warning',
@@ -25,15 +27,17 @@ export default function OrdersScreen() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'active' | 'past'>('active');
+  const [focusTick, setFocusTick] = useState(0);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchOrders();
-  }, [user, tab]);
+  const activeStatuses = ['pending', 'accepted', 'in_progress', 'delivering'];
+  const pastStatuses   = ['completed', 'cancelled'];
 
   async function fetchOrders() {
+    if (!user) return;
     setLoading(true);
-    const activeStatuses = ['pending', 'accepted', 'in_progress', 'delivering'];
+
+    // Fetch active orders (includes pending that may have since expired)
+    const isActive = tab === 'active';
     const { data } = await supabase
       .from('orders')
       .select(`
@@ -43,13 +47,45 @@ export default function OrdersScreen() {
         ),
         service:services(*)
       `)
-      .eq('client_id', user!.id)
-      .in('status', tab === 'active' ? activeStatuses : ['completed', 'cancelled'])
+      .eq('client_id', user.id)
+      .in('status', isActive ? activeStatuses : pastStatuses)
       .order('created_at', { ascending: false });
 
-    setOrders((data as any) ?? []);
+    const rows: Order[] = (data as any) ?? [];
+
+    // Cancel any pending orders that are past the 10-minute window
+    if (isActive) {
+      const now = Date.now();
+      const expired = rows.filter(
+        (o) => o.status === 'pending' && now - new Date(o.created_at).getTime() > EXPIRY_MS
+      );
+      if (expired.length > 0) {
+        await Promise.all(
+          expired.map((o) => supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id))
+        );
+        // Re-fetch so expired orders are gone from the list
+        const { data: fresh } = await supabase
+          .from('orders')
+          .select(`*, photographer:photographer_profiles!orders_photographer_id_fkey(*, user:users(*)), service:services(*)`)
+          .eq('client_id', user.id)
+          .in('status', activeStatuses)
+          .order('created_at', { ascending: false });
+        setOrders((fresh as any) ?? []);
+        setLoading(false);
+        return;
+      }
+    }
+
+    setOrders(rows);
     setLoading(false);
   }
+
+  // Increment focusTick every time screen gains focus → triggers re-fetch
+  useFocusEffect(useCallback(() => { setFocusTick((n) => n + 1); }, []));
+
+  useEffect(() => {
+    if (user) fetchOrders();
+  }, [focusTick, user?.id, tab]);
 
   return (
     <SafeAreaView style={styles.safe}>

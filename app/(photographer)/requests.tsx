@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList,
   TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/Badge';
@@ -16,18 +16,19 @@ export default function RequestsScreen() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'active' | 'past'>('active');
   const [photographerId, setPhotographerId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) loadOrders();
-  }, [user]);
+  const activeStatuses = ['pending', 'accepted', 'in_progress', 'delivering'];
+  const pastStatuses   = ['completed', 'cancelled'];
 
-  async function loadOrders() {
+  const loadOrders = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     const { data: profile } = await supabase
       .from('photographer_profiles')
       .select('id')
-      .eq('user_id', user!.id)
+      .eq('user_id', user.id)
       .single();
 
     if (!profile) { setLoading(false); return; }
@@ -37,11 +38,29 @@ export default function RequestsScreen() {
       .from('orders')
       .select('*, service:services(*), client:users!orders_client_id_fkey(*)')
       .eq('photographer_id', profile.id)
+      .in('status', tab === 'active' ? activeStatuses : pastStatuses)
       .order('created_at', { ascending: false });
 
     setOrders((data as any) ?? []);
     setLoading(false);
-  }
+  }, [user?.id, tab]);
+
+  useFocusEffect(useCallback(() => { loadOrders(); }, [loadOrders]));
+
+  // Realtime: move orders between tabs instantly when status changes
+  useEffect(() => {
+    if (!photographerId) return;
+    const channel = supabase
+      .channel('photographer-orders-status')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `photographer_id=eq.${photographerId}`,
+      }, () => loadOrders())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [photographerId, loadOrders]);
 
   async function updateStatus(orderId: string, status: Order['status']) {
     await supabase.from('orders').update({ status }).eq('id', orderId);
@@ -71,6 +90,19 @@ export default function RequestsScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.title}>Booking Requests</Text>
+        <View style={styles.tabs}>
+          {(['active', 'past'] as const).map((t) => (
+            <TouchableOpacity
+              key={t}
+              style={[styles.tab, tab === t && styles.tabActive]}
+              onPress={() => setTab(t)}
+            >
+              <Text style={[styles.tabLabel, tab === t && styles.tabLabelActive]}>
+                {t === 'active' ? 'Active' : 'Past'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
       <FlatList
         data={orders}
@@ -80,9 +112,13 @@ export default function RequestsScreen() {
         onRefresh={loadOrders}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📬</Text>
-            <Text style={styles.emptyTitle}>No requests yet</Text>
-            <Text style={styles.emptyDesc}>New booking requests will appear here. Make sure you're available on the map!</Text>
+            <Text style={styles.emptyIcon}>{tab === 'active' ? '📬' : '🗂️'}</Text>
+            <Text style={styles.emptyTitle}>{tab === 'active' ? 'No active requests' : 'No past orders'}</Text>
+            <Text style={styles.emptyDesc}>
+              {tab === 'active'
+                ? 'New booking requests will appear here. Make sure you\'re available on the map!'
+                : 'Completed and cancelled orders will appear here.'}
+            </Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -152,8 +188,13 @@ export default function RequestsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.white },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { paddingHorizontal: SPACING.base, paddingTop: SPACING.lg, paddingBottom: SPACING.md },
+  header: { paddingHorizontal: SPACING.base, paddingTop: SPACING.lg, paddingBottom: SPACING.md, gap: SPACING.md },
   title: { fontSize: FONTS.sizes['2xl'], fontWeight: '800', color: COLORS.dark },
+  tabs: { flexDirection: 'row', gap: SPACING.sm },
+  tab: { paddingVertical: SPACING.xs, paddingHorizontal: SPACING.base, borderRadius: BORDER_RADIUS.full, backgroundColor: COLORS.light },
+  tabActive: { backgroundColor: COLORS.primary },
+  tabLabel: { fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.muted },
+  tabLabelActive: { color: COLORS.white },
   list: { padding: SPACING.base, gap: SPACING.md },
   emptyWrap: { flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md, padding: SPACING['2xl'] },
